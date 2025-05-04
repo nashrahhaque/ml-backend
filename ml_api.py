@@ -1,4 +1,5 @@
-# ml_api.py  – FastAPI micro‑service for FairScore model
+# ml_api.py – FastAPI micro-service for FairScore model
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -6,6 +7,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import joblib
+import os
 
 # -------------------------------------------------------
 # 1) Model definition & loading
@@ -23,10 +25,15 @@ class FairNN(nn.Module):
         return self.net(x)
 
 # Load scaler & model state (CPU safe)
-scaler = joblib.load("models/scaler.joblib")
-model  = FairNN(10)
-model.load_state_dict(torch.load("models/fair_nn.pt",
-                                 map_location=torch.device("cpu")))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+scaler = joblib.load(os.path.join(BASE_DIR, "models", "scaler.joblib"))
+model = FairNN(10)
+model.load_state_dict(
+    torch.load(
+        os.path.join(BASE_DIR, "models", "fair_nn.pt"),
+        map_location=torch.device("cpu")
+    )
+)
 model.eval()
 
 # -------------------------------------------------------
@@ -34,15 +41,23 @@ model.eval()
 # -------------------------------------------------------
 app = FastAPI(title="FairScore ML API")
 
+# Allow all origins for now; lock down in production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],        # in prod restrict to your site
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # -------------------------------------------------------
-# 3) Input schema
+# 3) Health check
+# -------------------------------------------------------
+@app.get("/", tags=["health"])
+def root():
+    return {"status": "ok"}
+
+# -------------------------------------------------------
+# 4) Input schema
 # -------------------------------------------------------
 class Candidate(BaseModel):
     age_group: int
@@ -57,9 +72,9 @@ class Candidate(BaseModel):
     pct_male_lowed: float
 
 # -------------------------------------------------------
-# 4) Prediction endpoint
+# 5) Prediction endpoint
 # -------------------------------------------------------
-@app.post("/predict")
+@app.post("/predict", tags=["predict"])
 def predict(c: Candidate):
     try:
         # Assemble feature vector
@@ -93,5 +108,4 @@ def predict(c: Candidate):
         }
 
     except Exception as e:
-        # Bubble up errors with 500 status
         raise HTTPException(status_code=500, detail=str(e))
