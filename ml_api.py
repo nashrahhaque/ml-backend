@@ -109,3 +109,15 @@ def predict(c: Candidate):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/ping", tags=["health"])
+def ping():
+    try:
+        # Dummy input to simulate model usage and keep it warm
+        dummy_feats = np.array([[1, 1, 1, 3.0, 0.3, 0.7, 0.2, 0.8, 0.4, 0.6]], dtype=np.float32)
+        dummy_feats[:, 4:] = scaler.transform(dummy_feats[:, 4:])
+        with torch.no_grad():
+            _ = model(torch.from_numpy(dummy_feats)).item()
+        return {"status": "warmed up"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Warm-up failed: {str(e)}")
